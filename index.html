@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NITJ Library Seat Portal</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="auth-section" class="panel login-panel">
+        <h1>Welcome to NITJ Library</h1>
+        <p class="subtitle">Sign in or create an account to view floor-wise seat availability.</p>
+
+        <div class="auth-tabs">
+          <button type="button" id="tab-login" class="auth-tab active">Login</button>
+          <button type="button" id="tab-signup" class="auth-tab">Sign Up</button>
+        </div>
+
+        <!-- Login Form -->
+        <div id="login-form-wrap" class="auth-form-wrap">
+          <form id="login-form">
+            <div class="role-toggle">
+              <label class="role-option">
+                <input type="radio" name="loginRole" value="user" checked />
+                <span>Login as User</span>
+              </label>
+              <label class="role-option">
+                <input type="radio" name="loginRole" value="admin" />
+                <span>Login as Admin</span>
+              </label>
+            </div>
+
+            <label for="login-email">Email</label>
+            <input id="login-email" name="email" type="email" placeholder="Enter your email" required />
+
+            <label for="login-password">Password</label>
+            <input id="login-password" name="password" type="password" placeholder="Enter your password" required />
+
+            <button type="submit">Login</button>
+            <p id="login-message" class="message"></p>
+          </form>
+        </div>
+
+        <!-- Signup Form -->
+        <div id="signup-form-wrap" class="auth-form-wrap hidden">
+          <form id="signup-form">
+            <label for="signup-name">Full Name</label>
+            <input id="signup-name" name="fullName" type="text" placeholder="Enter your full name" />
+
+            <label for="signup-email">Email</label>
+            <input id="signup-email" name="email" type="email" placeholder="Enter your email" required />
+
+            <label for="signup-password">Password</label>
+            <input id="signup-password" name="password" type="password" placeholder="Create a password (min 6 characters)" required minlength="6" />
+
+            <button type="submit">Create Account</button>
+            <p id="signup-message" class="message"></p>
+            <p class="hint">New accounts are created as Users. Contact an admin for admin access.</p>
+          </form>
+        </div>
+      </section>
+
+      <section id="dashboard-section" class="panel hidden">
+        <div class="dashboard-top">
+          <div>
+            <h2>Welcome to NITJ Library</h2>
+            <p id="welcome-user"></p>
+          </div>
+          <button id="logout-btn" class="secondary">Logout</button>
+        </div>
+
+        <div class="legend">
+          <span><i class="dot vacant"></i> Vacant (Red)</span>
+          <span><i class="dot occupied"></i> Occupied (Green)</span>
+        </div>
+
+        <div id="admin-only" class="hidden">
+          <p class="admin-badge">Admin mode – you can toggle seat status</p>
+        </div>
+
+        <div class="floor-grid">
+          <article class="floor-card">
+            <div class="floor-head">
+              <h3>Ground Floor</h3>
+              <p id="floor-0-count"></p>
+            </div>
+            <div id="floor-0-seats" class="seats"></div>
+          </article>
+
+          <article class="floor-card">
+            <div class="floor-head">
+              <h3>Floor 1</h3>
+              <p id="floor-1-count"></p>
+            </div>
+            <div id="floor-1-seats" class="seats"></div>
+          </article>
+
+          <article class="floor-card">
+            <div class="floor-head">
+              <h3>Floor 2</h3>
+              <p id="floor-2-count"></p>
+            </div>
+            <div id="floor-2-seats" class="seats"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
