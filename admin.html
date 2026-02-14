@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NITJ Library – Admin Panel</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="admin-login-panel" class="panel login-panel">
+        <h1>Admin Panel</h1>
+        <p class="subtitle">Login as admin to manage library seats.</p>
+        <form id="admin-login-form">
+          <label for="admin-email">Email</label>
+          <input id="admin-email" name="email" type="email" placeholder="Admin email" required />
+          <label for="admin-password">Password</label>
+          <input id="admin-password" name="password" type="password" placeholder="Password" required />
+          <button type="submit">Login</button>
+          <p id="admin-login-message" class="message"></p>
+        </form>
+      </section>
+
+      <section id="admin-dashboard" class="panel hidden">
+        <div class="dashboard-top">
+          <div>
+            <h2>Admin – Seat Management</h2>
+            <p id="admin-email-view" class="subtitle"></p>
+            <p id="admin-global-count" class="muted"></p>
+          </div>
+          <button id="admin-logout" class="secondary">Logout</button>
+        </div>
+
+        <div class="legend">
+          <span><i class="dot vacant"></i> Vacant</span>
+          <span><i class="dot occupied"></i> Occupied (click to toggle)</span>
+        </div>
+
+        <div class="floor-grid">
+          <article class="floor-card">
+            <div class="floor-head">
+              <h3>Ground Floor</h3>
+              <p id="floor-0-count"></p>
+            </div>
+            <div id="floor-0-seats" class="seats"></div>
+          </article>
+          <article class="floor-card">
+            <div class="floor-head">
+              <h3>Floor 1</h3>
+              <p id="floor-1-count"></p>
+            </div>
+            <div id="floor-1-seats" class="seats"></div>
+          </article>
+          <article class="floor-card">
+            <div class="floor-head">
+              <h3>Floor 2</h3>
+              <p id="floor-2-count"></p>
+            </div>
+            <div id="floor-2-seats" class="seats"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="admin-panel.js"></script>
+  </body>
+</html>

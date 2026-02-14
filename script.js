@@ -1,9 +1,15 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabase-config.js";
+import { fetchSeats, updateSeat } from "./admin.js";
+
+if (window.location.protocol === "file:") {
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    '<div style="background:#fef3c7;color:#92400e;padding:12px;text-align:center;font-weight:600">⚠️ Run with a local server: <code>npx serve .</code> — opening the file directly causes "failed to fetch"</div>'
+  );
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const STORAGE_KEY = "nitj-library-seats-v1";
 
 const authSection = document.getElementById("auth-section");
 const dashboardSection = document.getElementById("dashboard-section");
@@ -18,6 +24,7 @@ const signupMessage = document.getElementById("signup-message");
 const welcomeUser = document.getElementById("welcome-user");
 const logoutBtn = document.getElementById("logout-btn");
 const adminOnlyEl = document.getElementById("admin-only");
+const seatsErrorEl = document.getElementById("seats-error");
 
 const floorOneSeatsEl = document.getElementById("floor-1-seats");
 const floorTwoSeatsEl = document.getElementById("floor-2-seats");
@@ -32,69 +39,22 @@ const state = {
   profile: null,
 };
 
-const EXPECTED_SEAT_PLAN = { 0: 50, 1: 50, 2: 50 };
-const EXPECTED_TOTAL_SEATS = Object.values(EXPECTED_SEAT_PLAN).reduce((sum, count) => sum + count, 0);
-
 function showMessage(el, text, isError = true) {
   el.textContent = text;
   el.style.color = isError ? "#d92d20" : "#2f9e44";
 }
 
-function makeDefaultSeats() {
-  const seats = [];
-  Object.entries(EXPECTED_SEAT_PLAN).forEach(([floorKey, total]) => {
-    const floor = Number(floorKey);
-    for (let number = 1; number <= total; number += 1) {
-      seats.push({
-        id: `F${floor}-S${String(number).padStart(2, "0")}`,
-        floor,
-        occupied: Math.random() > 0.5,
-      });
-    }
-  });
-  return seats;
-}
-
-function saveSeats() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.seats));
-}
-
-function loadSeats() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    state.seats = makeDefaultSeats();
-    saveSeats();
-    return;
+async function loadSeatsFromSupabase() {
+  seatsErrorEl.classList.add("hidden");
+  seatsErrorEl.textContent = "";
+  const seats = await fetchSeats();
+  if (seats && Array.isArray(seats) && seats.length > 0) {
+    state.seats = seats;
+  } else {
+    state.seats = [];
+    seatsErrorEl.textContent = "Could not load seats. Run the library_seats SQL in Supabase (see supabase-setup.sql).";
+    seatsErrorEl.classList.remove("hidden");
   }
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length === EXPECTED_TOTAL_SEATS) {
-      const counts = parsed.reduce(
-        (acc, seat) => {
-          if (seat.floor in acc) acc[seat.floor] += 1;
-          return acc;
-        },
-        { 0: 0, 1: 0, 2: 0 }
-      );
-
-      const isValidPlan = Object.entries(EXPECTED_SEAT_PLAN).every(
-        ([floor, expected]) => counts[floor] === expected
-      );
-
-      if (!isValidPlan) {
-        state.seats = makeDefaultSeats();
-        saveSeats();
-        return;
-      }
-
-      state.seats = parsed;
-      return;
-    }
-  } catch {}
-
-  state.seats = makeDefaultSeats();
-  saveSeats();
 }
 
 async function fetchProfile(userId) {
@@ -146,8 +106,9 @@ function renderFloor(floor, targetEl, countEl) {
     const seatEl = document.createElement("button");
     seatEl.type = "button";
     seatEl.className = `seat ${seat.occupied ? "occupied" : "vacant"}`;
-    seatEl.textContent = seat.id;
-    seatEl.title = `${seat.id} - ${seat.occupied ? "Occupied" : "Vacant"}${isAdmin ? " (click to toggle)" : ""}`;
+    const label = seat.displayId || seat.id;
+    seatEl.textContent = label;
+    seatEl.title = `${label} - ${seat.occupied ? "Occupied" : "Vacant"}${isAdmin ? " (click to toggle)" : ""}`;
     seatEl.dataset.id = seat.id;
     seatEl.disabled = !isAdmin;
     if (!isAdmin) seatEl.style.cursor = "default";
@@ -161,13 +122,23 @@ function renderSeats() {
   renderFloor(2, floorTwoSeatsEl, floorTwoCountEl);
 }
 
-function toggleSeatStatus(seatId) {
+async function toggleSeatStatus(seatId) {
   if (state.profile?.role !== "admin") return;
-  const seat = state.seats.find((item) => item.id === seatId);
-  if (!seat) return;
-  seat.occupied = !seat.occupied;
-  saveSeats();
-  renderSeats();
+  const seat = state.seats.find((item) => String(item.id) === String(seatId));
+  if (!seat) {
+    seatsErrorEl.textContent = "Seat not found. Please refresh the page.";
+    seatsErrorEl.classList.remove("hidden");
+    return;
+  }
+  const newOccupied = !seat.occupied;
+  const result = await updateSeat(seat.id, newOccupied);
+  if (result.success) {
+    seat.occupied = newOccupied;
+    renderSeats();
+  } else {
+    seatsErrorEl.textContent = result.error || "Failed to update seat.";
+    seatsErrorEl.classList.remove("hidden");
+  }
 }
 
 // Tab switching
@@ -232,9 +203,19 @@ loginForm.addEventListener("submit", async (event) => {
 
     showMessage(loginMessage, "", false);
     setLoggedIn(data.user, profile);
+    await loadSeatsFromSupabase();
     renderSeats();
   } catch (err) {
-    showMessage(loginMessage, err.message || "Something went wrong. Please try again.");
+    if (err?.name === "AbortError" || err?.message?.toLowerCase().includes("aborted")) return;
+    const msg = err?.message || "";
+    if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("network")) {
+      showMessage(
+        loginMessage,
+        "Network error. Run the app with a local server: npx serve . (Opening the HTML file directly won't work)"
+      );
+    } else {
+      showMessage(loginMessage, msg || "Something went wrong. Please try again.");
+    }
   }
 });
 
@@ -285,13 +266,23 @@ signupForm.addEventListener("submit", async (event) => {
     const profile = await fetchProfile(data.user.id);
     if (profile) {
       setLoggedIn(data.user, profile);
+      await loadSeatsFromSupabase();
       renderSeats();
     } else {
       tabLogin.click();
       showMessage(loginMessage, "Account created. You can login now.", false);
     }
   } catch (err) {
-    showMessage(signupMessage, err.message || "Something went wrong. Please try again.");
+    if (err?.name === "AbortError" || err?.message?.toLowerCase().includes("aborted")) return;
+    const msg = err?.message || "";
+    if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("network")) {
+      showMessage(
+        signupMessage,
+        "Network error. Run the app with a local server: npx serve . (Opening the HTML file directly won't work)"
+      );
+    } else {
+      showMessage(signupMessage, msg || "Something went wrong. Please try again.");
+    }
   }
 });
 
@@ -303,14 +294,13 @@ dashboardSection.addEventListener("click", (event) => {
 
 logoutBtn.addEventListener("click", logout);
 
-loadSeats();
-
 // Check existing session
 supabase.auth.getSession().then(async ({ data: { session } }) => {
   if (session?.user) {
     const profile = await fetchProfile(session.user.id);
     if (profile) {
       setLoggedIn(session.user, profile);
+      await loadSeatsFromSupabase();
       renderSeats();
     } else {
       await supabase.auth.signOut();

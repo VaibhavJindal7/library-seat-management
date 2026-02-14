@@ -51,3 +51,94 @@ create trigger on_auth_user_created
 
 -- 8. (Optional) Create an admin user manually - after signing up, run:
 -- update public.profiles set role = 'admin' where email = 'your-admin@email.com';
+
+-- ========== SEATS TABLE (for admin seat management) ==========
+
+-- 9. Create seats table
+create table if not exists public.seats (
+  id text primary key,
+  floor integer not null,
+  occupied boolean not null default false
+);
+
+-- 10. Enable RLS on seats
+alter table public.seats enable row level security;
+
+-- 11. Authenticated users can read seats
+create policy "Authenticated users can view seats"
+  on public.seats for select
+  to authenticated
+  using (true);
+
+-- 12. Only admins can update seats
+create policy "Admins can update seats"
+  on public.seats for update
+  to authenticated
+  using (
+    exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.role = 'admin')
+  )
+  with check (
+    exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.role = 'admin')
+  );
+
+-- 13. Only admins can insert seats (for seeding)
+create policy "Admins can insert seats"
+  on public.seats for insert
+  to authenticated
+  with check (
+    exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.role = 'admin')
+  );
+
+-- 14. Seed default seats (50 per floor, 3 floors)
+insert into public.seats (id, floor, occupied)
+select 'F' || f || '-S' || lpad(s::text, 2, '0'), f, (random() > 0.5)
+from generate_series(0, 2) f, generate_series(1, 50) s
+on conflict (id) do nothing;
+
+-- ========== LIBRARY_SEATS TABLE (admin panel with realtime) ==========
+
+-- 15. Create library_seats table (id, floor_no, seat_no, occupied)
+create table if not exists public.library_seats (
+  id bigserial primary key,
+  floor_no integer not null,
+  seat_no integer not null,
+  occupied boolean not null default false,
+  unique(floor_no, seat_no)
+);
+
+-- 16. Enable RLS
+alter table public.library_seats enable row level security;
+
+-- 16b. Helper to check admin (bypasses RLS for the check)
+create or replace function public.is_admin()
+returns boolean language sql security definer stable as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
+$$;
+
+-- 17. Anyone can read (for public display)
+create policy "Anyone can view library_seats"
+  on public.library_seats for select
+  using (true);
+
+-- 18. Only admins can update (uses is_admin() for reliable check)
+drop policy if exists "Admins can update library_seats" on public.library_seats;
+create policy "Admins can update library_seats"
+  on public.library_seats for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- 19. Only admins can insert
+create policy "Admins can insert library_seats"
+  on public.library_seats for insert
+  to authenticated
+  with check (exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.role = 'admin'));
+
+-- 20. Enable Realtime for library_seats (optional; or enable in Dashboard → Database → Replication)
+alter publication supabase_realtime add table public.library_seats;
+
+-- 21. Seed library_seats (50 per floor, 3 floors)
+insert into public.library_seats (floor_no, seat_no, occupied)
+select f, s, (random() > 0.5)
+from generate_series(0, 2) f, generate_series(1, 50) s
+on conflict (floor_no, seat_no) do nothing;
