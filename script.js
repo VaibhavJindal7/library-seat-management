@@ -33,11 +33,14 @@ const floorZeroCountEl = document.getElementById("floor-0-count");
 const floorOneCountEl = document.getElementById("floor-1-count");
 const floorTwoCountEl = document.getElementById("floor-2-count");
 
+const POLL_INTERVAL_MS = 5000; // Fallback when Realtime fails
+
 const state = {
   seats: [],
   user: null,
   profile: null,
   realtimeChannel: null,
+  pollInterval: null,
 };
 
 function showMessage(el, text, isError = true) {
@@ -80,19 +83,42 @@ function setLoggedIn(user, profile) {
   }
 }
 
+function startPolling() {
+  if (state.pollInterval) return;
+  state.pollInterval = setInterval(async () => {
+    try {
+      await loadSeatsFromSupabase();
+      renderSeats();
+    } catch (_) {}
+  }, POLL_INTERVAL_MS);
+}
+
+function stopPolling() {
+  if (state.pollInterval) {
+    clearInterval(state.pollInterval);
+    state.pollInterval = null;
+  }
+}
+
 function setupRealtime() {
-  if (state.realtimeChannel) return;
-  state.realtimeChannel = supabase
-    .channel("library-seats-realtime")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "library_seats" },
-      async () => {
-        await loadSeatsFromSupabase();
-        renderSeats();
-      }
-    )
-    .subscribe();
+  if (state.pollInterval) return;
+  try {
+    state.realtimeChannel = supabase
+      .channel("library-seats-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "library_seats" },
+        async () => {
+          await loadSeatsFromSupabase();
+          renderSeats();
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") stopPolling();
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") startPolling();
+      });
+  } catch (_) {}
+  startPolling();
 }
 
 function teardownRealtime() {
@@ -100,6 +126,7 @@ function teardownRealtime() {
     supabase.removeChannel(state.realtimeChannel);
     state.realtimeChannel = null;
   }
+  stopPolling();
 }
 
 function logout() {

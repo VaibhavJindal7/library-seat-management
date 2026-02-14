@@ -24,6 +24,19 @@ const floorCountEls = {
 };
 
 let seatRows = [];
+let pollInterval = null;
+
+function startPolling() {
+  if (pollInterval) return;
+  pollInterval = setInterval(() => fetchSeats(), 5000);
+}
+
+function stopPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+}
 
 function renderFloor(floorNo) {
   const rows = seatRows
@@ -100,16 +113,20 @@ async function toggleSeat(seatId) {
 }
 
 function setupRealtime() {
-  supabaseClient
-    .channel("library-seats-admin")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "library_seats" },
-      () => {
-        fetchSeats();
-      }
-    )
-    .subscribe();
+  try {
+    supabaseClient
+      .channel("library-seats-admin")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "library_seats" },
+        () => fetchSeats()
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") stopPolling();
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") startPolling();
+      });
+  } catch (_) {}
+  startPolling();
 }
 
 async function isAdmin(userId) {
@@ -148,6 +165,7 @@ dashboard.addEventListener("click", async (event) => {
 });
 
 logoutBtn.addEventListener("click", async () => {
+  stopPolling();
   await supabaseClient.auth.signOut();
   showLogin();
 });

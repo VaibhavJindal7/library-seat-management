@@ -134,8 +134,12 @@ create policy "Admins can insert library_seats"
   to authenticated
   with check (exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.role = 'admin'));
 
--- 20. Enable Realtime for library_seats (optional; or enable in Dashboard → Database → Replication)
+-- 20. Enable Realtime for library_seats
+-- Run in Supabase SQL Editor, or enable in Dashboard → Database → Replication
 alter publication supabase_realtime add table public.library_seats;
+
+-- 20b. Ensure Realtime sends full row data on UPDATE (required for postgres_changes)
+alter table public.library_seats replica identity full;
 
 -- 21. Seed library_seats (50 per floor, 3 floors)
 insert into public.library_seats (floor_no, seat_no, occupied)
