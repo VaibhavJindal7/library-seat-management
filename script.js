@@ -37,6 +37,7 @@ const state = {
   seats: [],
   user: null,
   profile: null,
+  realtimeChannel: null,
 };
 
 function showMessage(el, text, isError = true) {
@@ -79,7 +80,30 @@ function setLoggedIn(user, profile) {
   }
 }
 
+function setupRealtime() {
+  if (state.realtimeChannel) return;
+  state.realtimeChannel = supabase
+    .channel("library-seats-realtime")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "library_seats" },
+      async () => {
+        await loadSeatsFromSupabase();
+        renderSeats();
+      }
+    )
+    .subscribe();
+}
+
+function teardownRealtime() {
+  if (state.realtimeChannel) {
+    supabase.removeChannel(state.realtimeChannel);
+    state.realtimeChannel = null;
+  }
+}
+
 function logout() {
+  teardownRealtime();
   supabase.auth.signOut().then(() => {
     state.user = null;
     state.profile = null;
@@ -205,6 +229,7 @@ loginForm.addEventListener("submit", async (event) => {
     setLoggedIn(data.user, profile);
     await loadSeatsFromSupabase();
     renderSeats();
+    setupRealtime();
   } catch (err) {
     if (err?.name === "AbortError" || err?.message?.toLowerCase().includes("aborted")) return;
     const msg = err?.message || "";
@@ -268,6 +293,7 @@ signupForm.addEventListener("submit", async (event) => {
       setLoggedIn(data.user, profile);
       await loadSeatsFromSupabase();
       renderSeats();
+      setupRealtime();
     } else {
       tabLogin.click();
       showMessage(loginMessage, "Account created. You can login now.", false);
@@ -302,6 +328,7 @@ supabase.auth.getSession().then(async ({ data: { session } }) => {
       setLoggedIn(session.user, profile);
       await loadSeatsFromSupabase();
       renderSeats();
+      setupRealtime();
     } else {
       await supabase.auth.signOut();
     }
